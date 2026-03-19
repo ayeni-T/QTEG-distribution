@@ -1048,7 +1048,5 @@ Files created in:  {OUTPUT_DIR}
   fig2_simulation.png   <- Figure 2: Simulation diagnostics (3x3)
   fig3_all_datasets.png <- Figure 3: DS1 Bladder + DS2 Boeing + DS3 Melanoma (3x3, PDF/CDF/PP)
   fig4_hazard.png       <- Figure 4: Standalone hazard functions all 3 datasets (3x1)
-
-Upload QTEG_results.txt + 4 PNG files here for confirmation.
 ================================================================================
 """)
