@@ -4,7 +4,7 @@ Companion code for the paper:
 
 > **Quadratic Functional Variable Transformation of the Exponential-Gamma Distribution for Flexible Lifetime Modelling**  
 > Taiwo Michael Ayeni, Elijah Ayooluwa Odukoya, Yichuan Zhao  
-> *Statistical Papers* (Preparing for submission)
+> *Statistical Papers* (Under review)
 
 ---
 
@@ -102,7 +102,7 @@ If you use this code, please cite the paper:
 Ayeni, T.M., Odukoya, E.A. and Zhao, Y. (2026).
 Quadratic Functional Variable Transformation of the Exponential-Gamma
 Distribution for Flexible Lifetime Modelling.
-Statistical Papers. [Preparing for submission]
+Statistical Papers. [Under Review]
 ```
 
 ---
