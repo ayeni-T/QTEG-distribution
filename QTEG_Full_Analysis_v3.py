@@ -112,6 +112,18 @@ def qteg_hazard(y, alpha, beta):
     sf = qteg_sf(y, alpha, beta)
     return qteg_pdf(y, alpha, beta) / np.maximum(sf, 1e-300)
 
+def qteg_rhr(y, alpha, beta):
+    """Reversed hazard r(y) = f(y) / F(y)"""
+    y  = np.atleast_1d(np.asarray(y, float))
+    cdf = qteg_cdf(y, alpha, beta)
+    return qteg_pdf(y, alpha, beta) / np.maximum(cdf, 1e-300)
+
+def qteg_chf(y, alpha, beta):
+    """Cumulative hazard H(y) = -log(S(y))"""
+    y  = np.atleast_1d(np.asarray(y, float))
+    sf = qteg_sf(y, alpha, beta)
+    return -np.log(np.maximum(sf, 1e-300))
+
 def qteg_quantile(p, alpha, beta):
     """Quantile Q(p) = (gammaincinv(k, p) / r)^2"""
     return (gammaincinv(alpha, p) / beta) ** 2
@@ -194,11 +206,12 @@ def qteg_mle(y, n_starts=8):
 
     aic  = 4.0 - 2.0 * logL
     bic  = 2.0 * np.log(n) - 2.0 * logL
-    caic = aic + 2.0 * 2.0 * 3.0 / max(n - 3, 1)   # 2k(k+1)/(n-k-1) with k=2
+    aicc = aic + 2.0 * 2.0 * 3.0 / max(n - 3, 1)   # Hurvich-Tsai (1989): AIC + 2k(k+1)/(n-k-1), k=2
+    caic = -2.0 * logL + 2.0 * (np.log(n) + 1.0)   # Bozdogan (1987): -2logL + k(log(n)+1), k=2
     hqic = -2.0 * logL + 4.0 * np.log(np.log(n))
 
     return dict(alpha=alpha_hat, beta=beta_hat, se_alpha=se_alpha, se_beta=se_beta,
-                logL=logL, aic=aic, bic=bic, caic=caic, hqic=hqic,
+                logL=logL, aic=aic, bic=bic, aicc=aicc, caic=caic, hqic=hqic,
                 n=n, converged=True)
 
 # ============================================================
@@ -206,20 +219,25 @@ def qteg_mle(y, n_starts=8):
 # ============================================================
 
 def _ic(logL, p, n):
-    """Return (AIC, BIC, CAIC, HQIC)"""
+    """Return (AIC, BIC, AICc, CAIC, HQIC).
+    AICc = small-sample corrected AIC (Hurvich & Tsai, 1989).
+    CAIC = Bozdogan's (1987) Consistent AIC -- a different, unrelated
+    formula from AICc despite the similar name; both are reported.
+    """
     aic  = 2*p - 2*logL
     bic  = p*np.log(n) - 2*logL
-    caic = aic + 2*p*(p+1) / max(n - p - 1, 1)
+    aicc = aic + 2*p*(p+1) / max(n - p - 1, 1)
+    caic = -2*logL + p*(np.log(n) + 1)
     hqic = -2*logL + 2*p*np.log(np.log(n))
-    return aic, bic, caic, hqic
+    return aic, bic, aicc, caic, hqic
 
 def fit_weibull(y):
     c, _, s = weibull_min.fit(y, floc=0)
     lL = float(np.sum(weibull_min.logpdf(y, c, scale=s)))
-    aic, bic, caic, hqic = _ic(lL, 2, len(y))
+    aic, bic, aicc, caic, hqic = _ic(lL, 2, len(y))
     A  = '\u03b1'; B  = '\u03b2'
     return dict(label='Weibull', params=f'{A}={c:.4f}, {B}={s:.4f}',
-                npar=2, logL=lL, aic=aic, bic=bic, caic=caic, hqic=hqic,
+                npar=2, logL=lL, aic=aic, bic=bic, aicc=aicc, caic=caic, hqic=hqic,
                 cdf=lambda yy, c=c, s=s: weibull_min.cdf(yy, c, scale=s),
                 pdf=lambda yy, c=c, s=s: weibull_min.pdf(yy, c, scale=s),
                 haz=lambda yy, c=c, s=s: (weibull_min.pdf(yy,c,scale=s)
@@ -228,10 +246,10 @@ def fit_weibull(y):
 def fit_gamma(y):
     a, _, sc = gamma_dist.fit(y, floc=0)
     lL = float(np.sum(gamma_dist.logpdf(y, a, scale=sc)))
-    aic, bic, caic, hqic = _ic(lL, 2, len(y))
+    aic, bic, aicc, caic, hqic = _ic(lL, 2, len(y))
     A  = '\u03b1'; B  = '\u03b2'
     return dict(label='Gamma', params=f'{A}={a:.4f}, {B}={1/sc:.4f}',
-                npar=2, logL=lL, aic=aic, bic=bic, caic=caic, hqic=hqic,
+                npar=2, logL=lL, aic=aic, bic=bic, aicc=aicc, caic=caic, hqic=hqic,
                 cdf=lambda yy, a=a, sc=sc: gamma_dist.cdf(yy, a, scale=sc),
                 pdf=lambda yy, a=a, sc=sc: gamma_dist.pdf(yy, a, scale=sc),
                 haz=lambda yy, a=a, sc=sc: (gamma_dist.pdf(yy,a,scale=sc)
@@ -240,10 +258,10 @@ def fit_gamma(y):
 def fit_lognormal(y):
     sig, _, scl = lognorm.fit(y, floc=0)
     lL = float(np.sum(lognorm.logpdf(y, sig, scale=scl)))
-    aic, bic, caic, hqic = _ic(lL, 2, len(y))
+    aic, bic, aicc, caic, hqic = _ic(lL, 2, len(y))
     MU = '\u03bc'; SG = '\u03c3'
     return dict(label='Log-Normal', params=f'{MU}={np.log(scl):.4f}, {SG}={sig:.4f}',
-                npar=2, logL=lL, aic=aic, bic=bic, caic=caic, hqic=hqic,
+                npar=2, logL=lL, aic=aic, bic=bic, aicc=aicc, caic=caic, hqic=hqic,
                 cdf=lambda yy, sig=sig, scl=scl: lognorm.cdf(yy, sig, scale=scl),
                 pdf=lambda yy, sig=sig, scl=scl: lognorm.pdf(yy, sig, scale=scl),
                 haz=lambda yy, sig=sig, scl=scl: (lognorm.pdf(yy,sig,scale=scl)
@@ -252,10 +270,10 @@ def fit_lognormal(y):
 def fit_exponential(y):
     rate = 1.0 / np.mean(y)
     lL   = float(np.sum(expon.logpdf(y, scale=1/rate)))
-    aic, bic, caic, hqic = _ic(lL, 1, len(y))
+    aic, bic, aicc, caic, hqic = _ic(lL, 1, len(y))
     LA = '\u03bb'
     return dict(label='Exponential', params=f'{LA}={rate:.6f}',
-                npar=1, logL=lL, aic=aic, bic=bic, caic=caic, hqic=hqic,
+                npar=1, logL=lL, aic=aic, bic=bic, aicc=aicc, caic=caic, hqic=hqic,
                 cdf=lambda yy, rate=rate: expon.cdf(yy, scale=1/rate),
                 pdf=lambda yy, rate=rate: expon.pdf(yy, scale=1/rate),
                 haz=lambda yy, rate=rate: np.full_like(np.asarray(yy,float), rate))
@@ -265,10 +283,10 @@ def fit_exp_gamma(y):
     labelled separately to match the paper's Table structure."""
     a, _, sc = gamma_dist.fit(y, floc=0)
     lL = float(np.sum(gamma_dist.logpdf(y, a, scale=sc)))
-    aic, bic, caic, hqic = _ic(lL, 2, len(y))
+    aic, bic, aicc, caic, hqic = _ic(lL, 2, len(y))
     A  = '\u03b1'; B  = '\u03b2'
     return dict(label='EGD (Baseline)', params=f'{A}={a:.4f}, {B}={1/sc:.4f}',
-                npar=2, logL=lL, aic=aic, bic=bic, caic=caic, hqic=hqic,
+                npar=2, logL=lL, aic=aic, bic=bic, aicc=aicc, caic=caic, hqic=hqic,
                 cdf=lambda yy, a=a, sc=sc: gamma_dist.cdf(yy, a, scale=sc),
                 pdf=lambda yy, a=a, sc=sc: gamma_dist.pdf(yy, a, scale=sc))
 
@@ -298,14 +316,14 @@ def fit_exponentiated_gamma(y):
     if best is None: return None
     a_, b_, lam_ = best.x
     lL = -best.fun
-    aic, bic, caic, hqic = _ic(lL, 3, len(y))
+    aic, bic, aicc, caic, hqic = _ic(lL, 3, len(y))
 
     def eg_cdf(yy, a=a_, b=b_, lam=lam_):
         return np.clip(gamma_dist.cdf(yy, a, scale=b), 0, 1)**lam
 
     A  = '\u03b1'; B  = '\u03b2'; LA = '\u03bb'
     return dict(label='Exp-Gamma', params=f'{A}={a_:.4f}, {B}={b_:.4f}, {LA}={lam_:.4f}',
-                npar=3, logL=lL, aic=aic, bic=bic, caic=caic, hqic=hqic,
+                npar=3, logL=lL, aic=aic, bic=bic, aicc=aicc, caic=caic, hqic=hqic,
                 cdf=eg_cdf)
 
 def fit_kumaraswamy_gamma(y):
@@ -336,7 +354,7 @@ def fit_kumaraswamy_gamma(y):
     if best is None: return None
     ak_, bk_, sh_, sc_ = best.x
     lL = -best.fun
-    aic, bic, caic, hqic = _ic(lL, 4, len(y))
+    aic, bic, aicc, caic, hqic = _ic(lL, 4, len(y))
 
     def kg_cdf(yy, ak=ak_, bk=bk_, sh=sh_, sc=sc_):
         Gv = np.clip(gamma_dist.cdf(yy, sh, scale=sc), 0, 1)
@@ -345,7 +363,7 @@ def fit_kumaraswamy_gamma(y):
     A  = '\u03b1'; B  = '\u03b2'
     return dict(label='Kum-Gamma',
                 params=f'a={ak_:.4f}, b={bk_:.4f}, {A}={sh_:.4f}, {B}={sc_:.4f}',
-                npar=4, logL=lL, aic=aic, bic=bic, caic=caic, hqic=hqic,
+                npar=4, logL=lL, aic=aic, bic=bic, aicc=aicc, caic=caic, hqic=hqic,
                 cdf=kg_cdf)
 
 
@@ -360,7 +378,7 @@ def fit_lindley(y):
     theta = res.x
     lL = -res.fun
     n, p = len(y), 1
-    aic, bic, caic, hqic = _ic(lL, p, n)
+    aic, bic, aicc, caic, hqic = _ic(lL, p, n)
     def lindley_cdf(yy, th=theta):
         yy = np.asarray(yy, float)
         return 1.0 - (1.0 + th*yy/(1.0+th)) * np.exp(-th*yy)
@@ -373,7 +391,7 @@ def fit_lindley(y):
         return p / s
     TH = '\u03b8'
     return dict(label='Lindley', params=f'{TH}={theta:.4f}',
-                npar=p, logL=lL, aic=aic, bic=bic, caic=caic, hqic=hqic,
+                npar=p, logL=lL, aic=aic, bic=bic, aicc=aicc, caic=caic, hqic=hqic,
                 cdf=lindley_cdf, pdf=lindley_pdf, haz=lindley_haz)
 
 # ============================================================
@@ -504,16 +522,16 @@ for sname, fn in stat_fns:
 # ============================================================
 
 print("\n\n" + "="*80)
-print("TABLE 6 -- MONTE CARLO SIMULATION STUDY  (Nsim=500, BFGS)")
+print("TABLE 6 -- MONTE CARLO SIMULATION STUDY  (Nsim=2000, BFGS)")
 print("="*80)
 
 SCENARIOS = [
-    (1.5, 0.5,  'Sc.1 (\u03b1=1.5, \u03b2=0.5)',  'Decreasing hazard'),
-    (2.0, 1.0,  'Sc.2 (\u03b1=2.0, \u03b2=1.0)',  'Bathtub hazard'),
-    (3.0, 2.0,  'Sc.3 (\u03b1=3.0, \u03b2=2.0)',  'Increasing then flat'),
+    (1.5, 0.5,  'Sc.1 (\u03b1=1.5, \u03b2=0.5)',  'Decreasing, unbounded initial hazard'),
+    (2.0, 1.0,  'Sc.2 (\u03b1=2.0, \u03b2=1.0)',  'Decreasing, finite initial hazard'),
+    (3.0, 2.0,  'Sc.3 (\u03b1=3.0, \u03b2=2.0)',  'Unimodal, zero initial hazard'),
 ]
 SAMPLE_SIZES = [30, 50, 100, 200]
-NSIM = 500
+NSIM = 2000
 
 sim_rows = []
 
@@ -675,19 +693,19 @@ for ds_name, y in DATA.items():
 
     # Print criteria table
     print(f"\n  {'Model':<12} {'p':>2}  {'logL':>10}  {'AIC':>10}  {'BIC':>10}"
-          f"  {'CAIC':>10}  {'HQIC':>10}  {'KS':>8}  {'KS p-val':>9}  {'CvM':>8}  {'AD':>8}")
-    print("  " + "-"*100)
+          f"  {'AICc':>10}  {'CAIC':>10}  {'HQIC':>10}  {'KS':>8}  {'KS p-val':>9}  {'CvM':>8}  {'AD':>8}")
+    print("  " + "-"*120)
     for mname, r in fits.items():
         mark = " *" if mname == 'QTEG' else "  "
         print(f"  {mname:<12}{mark}{r['npar']:>2}  {r['logL']:>10.3f}  {r['aic']:>10.3f}"
-              f"  {r['bic']:>10.3f}  {r['caic']:>10.3f}  {r['hqic']:>10.3f}"
+              f"  {r['bic']:>10.3f}  {r['aicc']:>10.3f}  {r['caic']:>10.3f}  {r['hqic']:>10.3f}"
               f"  {r['ks']:>8.4f}  {r['ks_p']:>9.4f}  {r['cvm']:>8.4f}  {r['ad']:>8.4f}")
     print("  * = proposed model")
 
     # Best per criterion
-    crit = ['aic', 'bic', 'ks', 'cvm', 'ad']
+    crit = ['aic', 'bic', 'aicc', 'caic', 'ks', 'cvm', 'ad']
     best = {c: min(fits, key=lambda m: fits[m][c]) for c in crit}
-    print(f"\n  Best: AIC={best['aic']}  BIC={best['bic']}"
+    print(f"\n  Best: AIC={best['aic']}  BIC={best['bic']}  AICc={best['aicc']}  CAIC={best['caic']}"
           f"  KS={best['ks']}  CvM={best['cvm']}  AD={best['ad']}")
 
 # ============================================================
@@ -744,44 +762,84 @@ HAZARD_MODELS = ['Weibull', 'Gamma', 'LogNorm', 'Expon', 'Lindley']
 # ─────────────────────────────────────────────────────────────────────────────
 # FIGURE 1  Theoretical Properties  (2 x 2)
 # ─────────────────────────────────────────────────────────────────────────────
+# Parameter sets match the three Monte Carlo simulation scenarios
+# (Table tab:scenarios), so theory and simulation are directly linked.
+# Numerically verified ranges (see manuscript response for detail):
+#   PDF   over y in [0.02,8]: ~15-19x range across scenarios  -> linear OK
+#   Hazard over y in [0.02,5]: ~2-6x range across scenarios   -> linear OK
+#   RHR   retains a >100x range near y=0 regardless of domain restriction
+#         (an inherent boundary property of the reversed hazard, not an
+#         artifact of these particular parameter values) -> log scale used
+#   CHF   is monotone with no boundary singularity          -> linear, y in [0,15]
+# Each panel therefore uses its own x-range and scale, chosen to make the
+# actual shape differences visible rather than forcing one shared window.
+# Legends give only (alpha,beta); the decreasing-unbounded/
+# decreasing-finite/unimodal-zero hazard descriptions belong
+# in the caption/prose rather than in every panel legend.
 param_sets = [
-    (1.0, 1.0, f'{A}=1.0, {B}=1.0'),
-    (2.0, 1.0, f'{A}=2.0, {B}=1.0'),
-    (3.0, 1.0, f'{A}=3.0, {B}=1.0'),
-    (2.0, 2.0, f'{A}=2.0, {B}=2.0'),
-    (0.8, 1.0, f'{A}=0.8, {B}=1.0'),
-    (4.0, 1.5, f'{A}=4.0, {B}=1.5'),
+    (1.5, 0.5, f'Sc. 1: {A}=1.5, {B}=0.5'),
+    (2.0, 1.0, f'Sc. 2: {A}=2.0, {B}=1.0'),
+    (3.0, 2.0, f'Sc. 3: {A}=3.0, {B}=2.0'),
 ]
-th_colors = ['#1f4e79','#2e75b6','#70ad47','#ed7d31','#c00000','#7030a0']
-y_th = np.linspace(0.005, 15, 600)
+th_colors = ['#1f4e79', '#ed7d31', '#70ad47']
 
 fig, axes = plt.subplots(2, 2, figsize=(13, 10))
-fig.suptitle('Figure 1: QTEG Distribution -- Theoretical Properties',
+fig.suptitle('QTEG Distribution -- Theoretical Properties',
              fontsize=13, fontweight='bold')
 
-panels = [
-    (qteg_pdf,    '(a) Probability Density Function',     'f(y)',  None),
-    (qteg_cdf,    '(b) Cumulative Distribution Function', 'F(y)',  None),
-    (qteg_sf,     '(c) Survival Function',                'S(y)',  None),
-    (qteg_hazard, '(d) Hazard Function',                  'h(y)',  3.0),
-]
-for ax, (func, title, ylabel, ylim_max) in zip(axes.flat, panels):
-    for (a_val, b_val, lab), col in zip(param_sets, th_colors):
-        vals = func(y_th, a_val, b_val)
-        if ylim_max is not None:
-            vals = np.minimum(vals, ylim_max)
-        ax.plot(y_th, vals, color=col, lw=2, label=lab)
-    ax.set_xlabel('y', fontsize=11); ax.set_ylabel(ylabel, fontsize=11)
-    ax.set_title(title, fontsize=11, fontweight='bold')
-    ax.legend(fontsize=9, framealpha=0.85)
-    ax.set_xlim(0, 15); ax.set_ylim(bottom=0)
-    if ylim_max: ax.set_ylim(0, ylim_max)
-    ax.grid(alpha=0.3)
+# (a) PDF and (b) Hazard: restricted x-range, linear scale (verified tame
+#     dynamic range above); ylim set via set_ylim (view window only) --
+#     the underlying data are never clipped/altered.
+# (c) Reversed hazard: log scale (inherent near-origin blow-up).
+# (d) Cumulative hazard: full range, linear (monotone, no singularity).
+ax_pdf, ax_haz, ax_rhr, ax_chf = axes[0,0], axes[0,1], axes[1,0], axes[1,1]
+
+y_a = np.linspace(0.02, 8, 1000)
+for (a_val, b_val, lab), col in zip(param_sets, th_colors):
+    ax_pdf.plot(y_a, qteg_pdf(y_a, a_val, b_val), color=col, lw=2, label=lab)
+ax_pdf.set_xlabel('y', fontsize=11); ax_pdf.set_ylabel('f(y)', fontsize=11)
+ax_pdf.set_title('(a) Probability Density Function', fontsize=11, fontweight='bold')
+ax_pdf.legend(fontsize=9, framealpha=0.85)
+ax_pdf.set_xlim(0, 8); ax_pdf.set_ylim(0, 0.55); ax_pdf.grid(alpha=0.3)
+
+y_b = np.linspace(0.02, 5, 1000)
+for (a_val, b_val, lab), col in zip(param_sets, th_colors):
+    ax_haz.plot(y_b, qteg_hazard(y_b, a_val, b_val), color=col, lw=2, label=lab)
+# Mark Scenario 3's interior maximum explicitly to make the unimodal
+# shape unambiguous rather than asking the reader to infer it.
+h3 = qteg_hazard(y_b, 3.0, 2.0)
+imax = np.argmax(h3)
+ax_haz.scatter([y_b[imax]], [h3[imax]], color='#70ad47', zorder=5, s=40, edgecolor='black')
+ax_haz.annotate(f'max at y\u2248{y_b[imax]:.2f}',
+                (y_b[imax], h3[imax]), xytext=(y_b[imax]+0.6, h3[imax]+0.05),
+                fontsize=8.5, arrowprops=dict(arrowstyle='->', lw=1))
+ax_haz.set_xlabel('y', fontsize=11); ax_haz.set_ylabel('h(y)', fontsize=11)
+ax_haz.set_title('(b) Hazard Function', fontsize=11, fontweight='bold')
+ax_haz.legend(fontsize=9, framealpha=0.85)
+ax_haz.set_xlim(0, 5); ax_haz.set_ylim(0, 0.6); ax_haz.grid(alpha=0.3)
+
+y_c = np.linspace(0.02, 15, 1000)
+for (a_val, b_val, lab), col in zip(param_sets, th_colors):
+    ax_rhr.plot(y_c, np.maximum(qteg_rhr(y_c, a_val, b_val), 1e-6), color=col, lw=2, label=lab)
+ax_rhr.set_xlabel('y', fontsize=11); ax_rhr.set_ylabel('r(y)  (log scale)', fontsize=11)
+ax_rhr.set_title('(c) Reversed Hazard Function', fontsize=11, fontweight='bold')
+ax_rhr.legend(fontsize=9, framealpha=0.85)
+ax_rhr.set_xlim(0, 15); ax_rhr.set_yscale('log'); ax_rhr.grid(alpha=0.3, which='both')
+
+y_d = np.linspace(0.005, 15, 1000)
+for (a_val, b_val, lab), col in zip(param_sets, th_colors):
+    ax_chf.plot(y_d, qteg_chf(y_d, a_val, b_val), color=col, lw=2, label=lab)
+ax_chf.set_xlabel('y', fontsize=11); ax_chf.set_ylabel('H(y)', fontsize=11)
+ax_chf.set_title('(d) Cumulative Hazard Function', fontsize=11, fontweight='bold')
+ax_chf.legend(fontsize=9, framealpha=0.85)
+ax_chf.set_xlim(0, 15); ax_chf.set_ylim(bottom=0); ax_chf.grid(alpha=0.3)
 
 plt.tight_layout(rect=[0, 0, 1, 0.97])
 path = os.path.join(OUTPUT_DIR, 'fig1_theoretical.png')
 plt.savefig(path, dpi=180, bbox_inches='tight'); plt.close()
 print(f"  Saved: {path}")
+
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # FIGURE 2  Simulation Diagnostics  (3 x 3)
@@ -793,7 +851,7 @@ alpha_trues = [1.5, 2.0, 3.0]
 beta_trues  = [0.5, 1.0, 2.0]
 
 fig, axes = plt.subplots(3, 3, figsize=(16, 13))
-fig.suptitle('Figure 2: Monte Carlo Simulation Study  (N = 500 replications)',
+fig.suptitle('Monte Carlo Simulation Study  (N = 2000 replications)',
              fontsize=13, fontweight='bold')
 
 row_meta = [
@@ -903,13 +961,13 @@ def draw_dataset_panels(axes_block, ds_name, y, fits, xlabel, ds_label):
     h_q  = qteg_hazard(y_plot, alpha_fit, beta_fit)
     h_med  = float(np.median(h_q[h_q > 0]))
     h_ceil = min(h_q.max() * 1.5, h_med * 20)
-    ax.plot(y_plot, np.minimum(h_q, h_ceil),
+    ax.plot(y_plot, h_q,
             color='#1f4e79', lw=2.5, label=qteg_label(qr))
     for mname in HAZARD_MODELS:
         if mname not in plot_comps or 'haz' not in plot_comps[mname]:
             continue
         col, ls, lw = COLORS[mname]
-        h_c = np.minimum(plot_comps[mname]['haz'](y_plot), h_ceil)
+        h_c = plot_comps[mname]['haz'](y_plot)
         ax.plot(y_plot, h_c, color=col, lw=lw, ls=ls,
                 label=model_label(mname, plot_comps[mname]))
     ax.set_xlabel(xlabel, fontsize=9); ax.set_ylabel('h(y)', fontsize=9)
@@ -927,7 +985,7 @@ ds_triples = [
 
 fig3, axes3 = plt.subplots(3, 3, figsize=(18, 14))
 fig3.suptitle(
-    'Figure 3: Empirical Applications -- Fitted PDF, CDF, and P-P Plots\n'
+    'Empirical Applications -- Fitted PDF, CDF, and P-P Plots\n'
     'DS1 Bladder Cancer, DS2 Boeing 720 Failures, DS3 Malignant Melanoma',
     fontsize=12, fontweight='bold')
 
@@ -988,16 +1046,16 @@ fig3.savefig(path3, dpi=180, bbox_inches='tight'); plt.close(fig3)
 print(f"  Saved: {path3}")
 
 # ─────────────────────────────────────────────────────────────────────────────
-# FIGURE 4  Standalone Hazard Functions  (3 rows x 1 col)
+# FIGURE 4  Standalone Hazard Functions  (1 row x 3 cols, side by side)
 # Separated from Figure 3 to highlight the hazard-shape argument
 # ─────────────────────────────────────────────────────────────────────────────
-fig4, axes4 = plt.subplots(3, 1, figsize=(9, 14))
+fig4, axes4 = plt.subplots(1, 3, figsize=(15, 4.5))
 fig4.suptitle(
-    'Figure 4: Fitted Hazard Functions -- DS1 Bladder Cancer,\n'
+    'Fitted Hazard Functions -- DS1 Bladder Cancer, '
     'DS2 Boeing 720 Failures, DS3 Malignant Melanoma',
     fontsize=12, fontweight='bold')
 
-for row, (ds_name, xlabel, ds_label) in enumerate(ds_triples):
+for col, (ds_name, xlabel, ds_label) in enumerate(ds_triples):
     y    = DATA[ds_name]
     fits = ALL_FIT[ds_name]
     if 'QTEG' not in fits:
@@ -1007,27 +1065,27 @@ for row, (ds_name, xlabel, ds_label) in enumerate(ds_triples):
     y_plot    = np.linspace(max(y.min() * 0.02, 0.005), y.max() * 1.02, 500)
     plot_comps = {m: fits[m] for m in ['Weibull','Gamma','LogNorm','Expon','Lindley'] if m in fits}
 
-    ax   = axes4[row]
+    ax   = axes4[col]
     h_q  = qteg_hazard(y_plot, alpha_fit, beta_fit)
     h_med  = float(np.median(h_q[h_q > 0]))
     h_ceil = min(h_q.max() * 1.5, h_med * 20)
-    ax.plot(y_plot, np.minimum(h_q, h_ceil),
+    ax.plot(y_plot, h_q,
             color='#1f4e79', lw=2.5, label=qteg_label(qr))
     for mname in HAZARD_MODELS:
         if mname not in plot_comps or 'haz' not in plot_comps[mname]:
             continue
-        col, ls, lw = COLORS[mname]
-        h_c = np.minimum(plot_comps[mname]['haz'](y_plot), h_ceil)
-        ax.plot(y_plot, h_c, color=col, lw=lw, ls=ls,
+        col2, ls, lw = COLORS[mname]
+        h_c = plot_comps[mname]['haz'](y_plot)
+        ax.plot(y_plot, h_c, color=col2, lw=lw, ls=ls,
                 label=model_label(mname, plot_comps[mname]))
     ax.set_xlabel(xlabel, fontsize=10); ax.set_ylabel('h(y)', fontsize=10)
     ax.set_title(f'{ds_label} Hazard Function', fontsize=10, fontweight='bold')
     ax.set_ylim(0, h_ceil)
-    ax.legend(fontsize=7.5, framealpha=0.85); ax.grid(alpha=0.3)
+    ax.legend(fontsize=6.5, framealpha=0.85); ax.grid(alpha=0.3)
 
-fig4.tight_layout(rect=[0, 0, 1, 0.94])
+fig4.tight_layout(rect=[0, 0, 1, 0.90])
 path4 = os.path.join(OUTPUT_DIR, 'fig4_hazard.png')
-fig4.savefig(path4, dpi=180, bbox_inches='tight'); plt.close(fig4)
+fig4.savefig(path4, dpi=150, bbox_inches='tight'); plt.close(fig4)
 print(f"  Saved: {path4}")
 
 # ============================================================
