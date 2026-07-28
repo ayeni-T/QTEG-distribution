@@ -12,7 +12,7 @@ Companion code for the paper:
 
 | File | Description |
 |---|---|
-| `QTEG_Full_Analysis_v4.py` | Complete Python script reproducing all tables and figures in the paper |
+| `QTEG_Full_Analysis_v3.py` | Complete Python script reproducing all tables and figures in the paper |
 
 ---
 
