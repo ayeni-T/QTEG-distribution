@@ -24,24 +24,42 @@ This repository is the code referenced in the paper's *Code availability* statem
 
 ## The QTEG distribution
 
-Let X ~ Gamma(α, β), the normalised exponential-gamma (EGD) baseline. The Quadratic-Transformed Exponential-Gamma (QTEG) distribution is the law of Y = X². Its probability density function is
+Let $X \sim \mathrm{Gamma}(\alpha, \beta)$ be the normalised exponential-gamma (EGD) baseline. The Quadratic-Transformed Exponential-Gamma (QTEG) distribution is the law of $Y = X^2$. Its probability density function is
 
-```
-f(y; α, β) = β^α / (2 Γ(α)) · y^((α−2)/2) · exp(−β√y),   y > 0,  α > 0, β > 0
+```math
+f_Y(y;\alpha,\beta) = \frac{\beta^{\alpha}}{2\,\Gamma(\alpha)}\, y^{(\alpha-2)/2}\, e^{-\beta\sqrt{y}}, \qquad y > 0,\ \alpha > 0,\ \beta > 0,
 ```
 
-where α is the shape parameter and β is the rate parameter. The CDF is F(y) = I(α, β√y), where I is the regularised lower incomplete gamma function.
+where $\alpha$ is the shape parameter and $\beta$ is the rate parameter. The cumulative distribution function is
+
+```math
+F_Y(y;\alpha,\beta) = I\big(\alpha, \beta\sqrt{y}\big) = \frac{\gamma\big(\alpha, \beta\sqrt{y}\big)}{\Gamma(\alpha)},
+```
+
+where $I(\alpha, x)$ is the regularised lower incomplete gamma function.
 
 Key properties established in the paper:
 
-- **Normalised baseline.** The raw EGD of Ogunwale et al. (2019) integrates to 2^(−k), not 1. The paper derives the normalising constant and shows that, after reparametrising α = k and β = 2λ, the corrected baseline is Gamma(α, β). Leaving out the constant shifts the log-likelihood by n log 2.
-- **Heavier tail.** The tail decay exp(−β√y) is strictly heavier than the Gamma tail exp(−βy). QTEG is the q = ½ case of the generalised Gamma family and is statistically distinct from the Gamma family (Proposition 10). All raw moments exist, E[Yⁿ] = Γ(2n + α) / (β^(2n) Γ(α)), but the moment generating function does not exist for t > 0.
-- **Three hazard regimes, all controlled by α** (proved with Glaser's (1980) auxiliary-function method):
-  - α < 2: decreasing hazard, unbounded at the origin
-  - α = 2: decreasing hazard with finite initial value β²/2
-  - α > 2: unimodal (upside-down-bathtub) hazard starting at zero
+- **Normalised baseline.** The raw EGD of Ogunwale et al. (2019) integrates to $2^{-k}$, not 1. The paper derives the normalising constant and shows that, after reparametrising $\alpha = k$ and $\beta = 2\lambda$, the corrected baseline is $\mathrm{Gamma}(\alpha, \beta)$. Leaving out the constant shifts the log-likelihood by $n \log 2$.
+- **Heavier tail.** The tail decay $e^{-\beta\sqrt{y}}$ is strictly heavier than the Gamma tail $e^{-\beta y}$. QTEG is the $q = 1/2$ case of the generalised Gamma family and is statistically distinct from the Gamma family (Proposition 10). All raw moments exist,
+
+  ```math
+  E\left[Y^n\right] = \frac{\Gamma(2n + \alpha)}{\beta^{2n}\,\Gamma(\alpha)}, \qquad n > -\alpha/2,
+  ```
+
+  but the moment generating function does not exist for $t > 0$.
+- **Three hazard regimes, all controlled by $\alpha$** (proved with Glaser's (1980) auxiliary-function method):
+  - $\alpha < 2$: decreasing hazard, unbounded at the origin
+  - $\alpha = 2$: decreasing hazard with finite initial value $\beta^2/2$
+  - $\alpha > 2$: unimodal (upside-down-bathtub) hazard starting at zero
 - **Closed forms** for the hazard, reversed hazard, cumulative hazard, Shannon entropy, quantile function and order statistics.
-- **Inference.** Semi-closed MLE with β̂(α) = α / mean(√yᵢ), proof that the MLE exists and is unique, and an analytic Fisher information matrix for Hessian-based standard errors and 95% Wald intervals.
+- **Inference.** Semi-closed MLE with
+
+  ```math
+  \hat{\beta}(\alpha) = \frac{\alpha}{\overline{\sqrt{y}}}, \qquad \overline{\sqrt{y}} = \frac{1}{n}\sum_{i=1}^{n}\sqrt{y_i},
+  ```
+
+  proof that the MLE exists and is unique, and an analytic Fisher information matrix for Hessian-based standard errors and 95% Wald intervals.
 
 ---
 
@@ -84,23 +102,23 @@ Runtime is approximately 15–20 minutes depending on hardware (the Monte Carlo 
 ## Estimation details
 
 - Optimiser: L-BFGS-B via `scipy.optimize.minimize`.
-- Starting values: a grid α₀ ∈ {0.5, 1.0, 1.5, 2.0, 3.0, 5.0, 8.0, 12.0}, with the semi-closed β̂₀ = α₀ / mean(√y) at each point. The solution with the smallest negative log-likelihood is kept. The grid is set **a priori** in `qteg_mle()`, before any simulation results are seen; the 100% convergence rate across all scenarios is post-hoc evidence that it was sufficient for the settings examined.
-- Convergence tolerances: 10⁻¹³ (function value) and 10⁻⁹ (gradient norm).
+- Starting values: a grid $\alpha_0 \in \lbrace 0.5, 1.0, 1.5, 2.0, 3.0, 5.0, 8.0, 12.0 \rbrace$, with the semi-closed $\hat{\beta}_0 = \alpha_0 / \overline{\sqrt{y}}$ at each point. The solution with the smallest negative log-likelihood is kept. The grid is set **a priori** in `qteg_mle()`, before any simulation results are seen; the 100% convergence rate across all scenarios is post-hoc evidence that it was sufficient for the settings examined.
+- Convergence tolerances: $10^{-13}$ (function value) and $10^{-9}$ (gradient norm).
 - Standard errors come from the analytic observed Fisher information matrix (Section 5.5 of the paper).
 
 ---
 
 ## Simulation study
 
-| Scenario | True α | True β | Hazard behaviour |
+| Scenario | True $\alpha$ | True $\beta$ | Hazard behaviour |
 |---|---|---|---|
 | Sc. 1 | 1.5 | 0.5 | Decreasing, unbounded initial hazard |
 | Sc. 2 | 2.0 | 1.0 | Decreasing, finite initial hazard |
 | Sc. 3 | 3.0 | 2.0 | Unimodal, zero initial hazard |
 
-Sample sizes: n = 30, 50, 100, 200. Replications: N = 2000. Data are generated as Yᵢ = Xᵢ² with Xᵢ ~ Gamma(α, β).
+Sample sizes: $n = 30, 50, 100, 200$. Replications: $N = 2000$. Data are generated as $Y_i = X_i^2$ with $X_i \sim \mathrm{Gamma}(\alpha, \beta)$.
 
-For each scenario and sample size the script reports, separately for α̂ and β̂: convergence rate, Bias, RMSE, AvgSE (mean Hessian-based standard error), CIW (average 95% Wald interval width = 2 × 1.96 × AvgSE), and empirical coverage probability (CP).
+For each scenario and sample size the script reports, separately for $\hat{\alpha}$ and $\hat{\beta}$: convergence rate, Bias, RMSE, AvgSE (mean Hessian-based standard error), CIW (average 95% Wald interval width, $\mathrm{CIW} = 2 \times 1.96 \times \mathrm{AvgSE}$), and empirical coverage probability (CP).
 
 ---
 
